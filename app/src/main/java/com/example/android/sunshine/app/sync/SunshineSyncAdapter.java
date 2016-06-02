@@ -39,6 +39,7 @@ import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.PutDataMapRequest;
@@ -482,12 +483,21 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                     // WEATHER_NOTIFICATION_ID allows you to update the notification later on.
                     mNotificationManager.notify(WEATHER_NOTIFICATION_ID, mBuilder.build());
 
+                    JSONObject data = new JSONObject();
+                    try {
+                        data.put("HIGH", Utility.formatTemperature(getContext(), high));
+                        data.put("LOW", Utility.formatTemperature(getContext(), low));
+                        data.put("TIME", System.currentTimeMillis());
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    sendDataToWear(data.toString(), largeIcon);
+
                     //refreshing last sync
                     SharedPreferences.Editor editor = prefs.edit();
                     editor.putLong(lastNotificationKey, System.currentTimeMillis());
                     editor.commit();
 
-                    sendDataToWear(high + "," + low, largeIcon);
                 }
                 cursor.close();
             }
@@ -649,7 +659,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     }
 
     public void sendDataToWear(String data, Bitmap icon){
-        GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(getContext())
+        final GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(getContext())
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
                     @Override
                     public void onConnected(Bundle bundle) {
@@ -677,7 +687,18 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         putDataMapRequest.getDataMap().putAsset("ICON", assetIcon);
         PutDataRequest putDataRequest = putDataMapRequest.asPutDataRequest();
         PendingResult<DataApi.DataItemResult> pendingResult = Wearable.DataApi.putDataItem(mGoogleApiClient, putDataRequest);
-
+        pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+            @Override
+            public void onResult(DataApi.DataItemResult dataItemResult) {
+                if (dataItemResult.getStatus().isSuccess()){
+                    Log.d(LOG_TAG, "Sent weather data to watch");
+                }
+                else{
+                    Log.d(LOG_TAG, "Unable to send data to watch");
+                }
+                mGoogleApiClient.disconnect();
+            }
+        });
     }
 
     private static Asset createAssetFromBitmap(Bitmap bitmap) {

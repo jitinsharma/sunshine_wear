@@ -339,6 +339,18 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 weatherValues.put(WeatherContract.WeatherEntry.COLUMN_SHORT_DESC, description);
                 weatherValues.put(WeatherContract.WeatherEntry.COLUMN_WEATHER_ID, weatherId);
 
+                if (i==0){
+                    JSONObject data = new JSONObject();
+                    try {
+                        data.put("HIGH", Utility.formatTemperature(getContext(), high));
+                        data.put("LOW", Utility.formatTemperature(getContext(), low));
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    int artResourceId = Utility.getArtResourceForWeatherCondition(weatherId);
+                    Bitmap largeIcon = BitmapFactory.decodeResource(getContext().getResources(), artResourceId);
+                    sendDataToWear(data.toString(), largeIcon);
+                }
                 cVVector.add(weatherValues);
             }
 
@@ -399,7 +411,8 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
             String lastNotificationKey = context.getString(R.string.pref_last_notification);
             long lastSync = prefs.getLong(lastNotificationKey, 0);
 
-            if (System.currentTimeMillis() - lastSync >= DAY_IN_MILLIS) {
+            //Change value for testing wearable data change events
+            if (System.currentTimeMillis() - lastSync >= 0) {
                 // Last sync was more than 1 day ago, let's send a notification with the weather.
                 String locationQuery = Utility.getPreferredLocation(context);
 
@@ -487,7 +500,6 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                     try {
                         data.put("HIGH", Utility.formatTemperature(getContext(), high));
                         data.put("LOW", Utility.formatTemperature(getContext(), low));
-                        data.put("TIME", System.currentTimeMillis());
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -583,6 +595,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         bundle.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
         ContentResolver.requestSync(getSyncAccount(context),
                 context.getString(R.string.content_authority), bundle);
+
     }
 
     /**
@@ -658,6 +671,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         spe.commit();
     }
 
+    /**
+     * Sends data to watch
+     * @param data json containing weather data
+     * @param icon Weather icon
+     */
     public void sendDataToWear(String data, Bitmap icon){
         final GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(getContext())
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -681,7 +699,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 .build();
         mGoogleApiClient.connect();
 
-        Asset assetIcon = createAssetFromBitmap(icon);
+        Asset assetIcon = createAssetFromBitmap(Bitmap.createScaledBitmap(icon, 52, 52, true));
         PutDataMapRequest putDataMapRequest = PutDataMapRequest.create("/weather");
         putDataMapRequest.getDataMap().putString("DATA", data);
         putDataMapRequest.getDataMap().putAsset("ICON", assetIcon);

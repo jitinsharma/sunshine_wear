@@ -27,6 +27,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -38,7 +39,6 @@ import android.text.format.Time;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
-import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -56,6 +56,8 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -71,11 +73,14 @@ public class MyWatchFace extends CanvasWatchFaceService{
     Paint mTextPaintDate;
     Paint mTextHighTemp;
     Paint mTextLowTemp;
+    Paint mArcPaint;
     String data;
     String highTemp;
     String lowTemp;
     String time;
     Bitmap icon;
+    Date mDate;
+    SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, MMM dd yyyy");
 
     /**
      * Update rate in milliseconds for interactive mode. We update once a second since seconds are
@@ -137,36 +142,6 @@ public class MyWatchFace extends CanvasWatchFaceService{
          * disable anti-aliasing in ambient mode.
          */
         boolean mLowBitAmbient;
-        final DataApi.DataListener dataListener = new DataApi.DataListener() {
-            @Override
-            public void onDataChanged(DataEventBuffer dataEventBuffer) {
-                Log.e(LOG_TAG, "onDataChanged(): " + dataEventBuffer);
-                for (DataEvent event: dataEventBuffer){
-                    if (event.getType() == DataEvent.TYPE_CHANGED){
-                        DataItem dataItem = event.getDataItem();
-                        if (dataItem.getUri().getPath().equals("/weather")){
-                            DataMap dataMap = DataMapItem.fromDataItem(dataItem).getDataMap();
-                            data = dataMap.getString("DATA");
-                            Log.d(LOG_TAG, "data " + data);
-                            try {
-                                JSONObject dataObject = new JSONObject(data);
-                                Log.d(LOG_TAG, "data json object " + dataObject);
-                                highTemp = dataObject.getString("HIGH");
-                                lowTemp = dataObject.getString("LOW");
-                                time = dataObject.getString("TIME");
-                                Log.d(LOG_TAG, "high temp:" + highTemp);
-                                Log.d(LOG_TAG, "low temp:" + lowTemp);
-                                Toast.makeText(getBaseContext(), "temp: " + highTemp + lowTemp, Toast.LENGTH_LONG).show();
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
-                            Asset assetIcon = dataMap.getAsset("ICON");
-                            icon = loadBitmapFromAsset(assetIcon);
-                        }
-                    }
-                }
-            }
-        };
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -176,19 +151,18 @@ public class MyWatchFace extends CanvasWatchFaceService{
                     .setCardPeekMode(WatchFaceStyle.PEEK_MODE_VARIABLE)
                     .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
                     .setShowSystemUiTime(false)
-                    .setAcceptsTapEvents(true)
                     .build());
             Resources resources = MyWatchFace.this.getResources();
             mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
             mBackgroundPaint = new Paint();
-            mBackgroundPaint.setColor(resources.getColor(R.color.background));
+            mBackgroundPaint.setColor(resources.getColor(R.color.white));
 
             mTextPaint = new Paint();
-            mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mTextPaint = createTextPaint(isInAmbientMode() ? resources.getColor(R.color.white): resources.getColor(R.color.black));
 
             mTextPaintDate = new Paint();
-            mTextPaintDate = createTextPaint(resources.getColor(R.color.white));
+            mTextPaintDate = createTextPaint(resources.getColor(R.color.black));
 
             mTextHighTemp = new Paint();
             mTextHighTemp = createTextPaint(resources.getColor(R.color.white));
@@ -196,13 +170,47 @@ public class MyWatchFace extends CanvasWatchFaceService{
             mTextLowTemp = new Paint();
             mTextLowTemp = createTextPaint(resources.getColor(R.color.white));
 
+            mArcPaint = new Paint();
+            mArcPaint = createTextPaint(resources.getColor(R.color.background));
+
             mTime = new Time();
+            mDate = new Date();
 
             mGoogleApiClient = new GoogleApiClient.Builder(getBaseContext())
                     .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
                         @Override
                         public void onConnected(Bundle bundle) {
                             Log.d(LOG_TAG, "API client connected");
+                            final DataApi.DataListener dataListener = new DataApi.DataListener() {
+                                @Override
+                                public void onDataChanged(DataEventBuffer dataEventBuffer) {
+                                    Log.e(LOG_TAG, "onDataChanged(): " + dataEventBuffer);
+                                    for (DataEvent event: dataEventBuffer){
+                                        if (event.getType() == DataEvent.TYPE_CHANGED){
+                                            DataItem dataItem = event.getDataItem();
+                                            if (dataItem.getUri().getPath().equals("/weather")){
+                                                DataMap dataMap = DataMapItem.fromDataItem(dataItem).getDataMap();
+                                                data = dataMap.getString("DATA");
+                                                Log.d(LOG_TAG, "data " + data);
+                                                try {
+                                                    JSONObject dataObject = new JSONObject(data);
+                                                    Log.d(LOG_TAG, "data json object " + dataObject);
+                                                    highTemp = dataObject.getString("HIGH");
+                                                    lowTemp = dataObject.getString("LOW");
+                                                    time = dataObject.getString("TIME");
+                                                    Log.d(LOG_TAG, "high temp:" + highTemp);
+                                                    Log.d(LOG_TAG, "low temp:" + lowTemp);
+                                                    //Toast.makeText(getBaseContext(), "temp: " + highTemp + lowTemp, Toast.LENGTH_LONG).show();
+                                                } catch (JSONException e) {
+                                                    e.printStackTrace();
+                                                }
+                                                Asset assetIcon = dataMap.getAsset("ICON");
+                                                icon = loadBitmapFromAsset(assetIcon);
+                                            }
+                                        }
+                                    }
+                                }
+                            };
                             Wearable.DataApi.addListener(mGoogleApiClient, dataListener);
                         }
 
@@ -233,7 +241,7 @@ public class MyWatchFace extends CanvasWatchFaceService{
         private Paint createTextPaint(int textColor) {
             Paint paint = new Paint();
             paint.setColor(textColor);
-            paint.setTypeface(NORMAL_TYPEFACE);
+            paint.setTypeface(Typeface.SANS_SERIF);
             paint.setAntiAlias(true);
             return paint;
         }
@@ -286,9 +294,11 @@ public class MyWatchFace extends CanvasWatchFaceService{
             float textSize = resources.getDimension(isRound
                     ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
 
-            mTextPaint.setTextSize(textSize);
-            mTextHighTemp.setTextSize(textSize);
-            mTextLowTemp.setTextSize(textSize);
+            mTextPaint.setTextSize(60);
+            mTextPaint.setStyle(Paint.Style.FILL_AND_STROKE);
+            mTextPaint.setTextAlign(Paint.Align.CENTER);
+            mTextHighTemp.setTextSize(25);
+            mTextLowTemp.setTextSize(25);
             mTextPaintDate.setTextSize(25);
         }
 
@@ -348,25 +358,64 @@ public class MyWatchFace extends CanvasWatchFaceService{
             // Draw the background.
             Log.d(LOG_TAG, "Drawing");
             Log.d(LOG_TAG, "Drawing " + highTemp);
+            int xPos = (canvas.getWidth() / 2);
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
+                mTextPaint.setColor(getResources().getColor(R.color.white));
             } else {
+                mTextPaint.setColor(getResources().getColor(R.color.black));
                 canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
+                float width = (float)canvas.getWidth();
+                float height = (float)canvas.getHeight();
+                float radius;
+
+                if (width > height){
+                    radius = height/2.0f;
+                }else{
+                    radius = width/2.0f;
+                }
+
+                float center_x = width * 0.5f;
+                float center_y = height * 1.0f;
+                final RectF rect = new RectF();
+                rect.set(center_x - radius,
+                        center_y - radius,
+                        center_x + radius,
+                        center_y + radius);
+                canvas.drawRoundRect(rect, 100, 100, mArcPaint);
+
+                String highTempText = "Sync with phone";
+                String lowTempText = "";
+
+                if (highTemp!=null){
+                    highTempText = (char) 0x2191 + highTemp;
+                }
+                if (lowTemp!=null){
+                    lowTempText = (char) 0x2191 + lowTemp;
+                }
+                String date = "Thu, 02 Jun 2016";
+                canvas.drawText(highTempText, mXOffset*2.5f, mYOffset*3.5f, mTextHighTemp);
+                canvas.drawText(lowTempText, mXOffset*4.5f, mYOffset*3.5f, mTextLowTemp);
+                canvas.drawText(dateFormat.format(mDate), mXOffset*2, mYOffset*(1.5f), mTextPaintDate);
+                if (icon!=null){
+                    canvas.drawBitmap(icon, mXOffset*3.5f, mYOffset*2.5f,null);
+                }
+                else{
+                }
             }
 
+            //canvas.drawRect(0, bounds.bottom, bounds.width(), bounds.width()/2, mArcPaint);
+            //canvas.drawRoundRect(30, 60, 100, 240, mXOffset, mYOffset*2, mArcPaint);
 
             // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
             mTime.setToNow();
             String text = String.format("%d:%02d", mTime.hour, mTime.minute);
+
+            canvas.drawText(text, xPos, mYOffset, mTextPaint);
             //String tempText = highTemp;
             //String lowTemp;
-            String highTempText = "20" + (char) 0x00B0;
-            String lowTempText = "12" + (char) 0x00B0;
-            String date = "Thu, 02 Jun 2016";
-            canvas.drawText(text, mXOffset*3, mYOffset, mTextPaint);
-            canvas.drawText(highTempText, mXOffset*3, mYOffset*2, mTextHighTemp);
-            canvas.drawText(lowTempText, mXOffset*5, mYOffset*2, mTextLowTemp);
-            canvas.drawText(date, mXOffset*2, mYOffset*3, mTextPaintDate);
+            //String highTempText = (char) 0x2191 + "20" + (char) 0x00B0;
+            //String lowTempText = (char) 0x2193 + "12" + (char) 0x00B0;
             //canvas.drawText(tempText, mXOffset, mYOffset, mTempPaint);
         }
 
